@@ -1,0 +1,91 @@
+{
+  "name": "ext-copyright",
+  "displayName": "ext-copyright",
+  "description": "description of extension copyright",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ext-copyright.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "ext-copyright.addCopyright",
+        "title": "Update Copyright Header"
+      }
+    ],
+    "configuration": {
+      "title": "ext-copyright",
+      "properties": {
+        "ext-copyright.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the copyright header check on save."
+        },
+        "ext-copyright.headerText": {
+          "type": "string",
+          "default": "// Copyright (c) 2025 My Company",
+          "description": "The copyright header text to check for."
+        },
+        "ext-copyright.confirmOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enables a confirmation dialog before updating the copyright header on save."
+        },
+        "ext-copyright.fileExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "hpp",
+            "cpp",
+            "ts",
+            "js",
+            "py",
+            "h"
+          ],
+          "description": "Only check files with these extensions (e.g. 'ts', 'js'). Leave empty to check all files."
+        },
+        "ext-copyright.extensionHeaders": {
+          "type": "object",
+          "default": {
+            "hpp,cpp,h": "/* Copyright (c) 2025 My Company */",
+            "ts,js": "// Copyright (c) 2025 My Company",
+            "py": "# Copyright (c) 2025 My Company"
+          },
+          "description": "Map specific file extensions to copyright headers. Key can be a single extension (e.g. 'py') or comma-separated extensions (e.g. 'ts,js,tsx'), value is the header text."
+        }
+      }
+    }
+  },
+  
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.91.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.48.1",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}

@@ -1,0 +1,192 @@
+// The module 'vscode' contains the VS Code extensibility API
+// Import the module and reference it with the alias vscode in your code below
+import * as vscode from 'vscode';
+
+// This method is called when your extension is activated
+// Your extension is activated the very first time the command is executed
+export function activate(context: vscode.ExtensionContext) {
+
+	// Use the console to output diagnostic information (console.log) and errors (console.error)
+	// This line of code will only be executed once when your extension is activated
+	console.log('Congratulations, your extension "ext-copyright" is now active!');
+
+	// The command has been defined in the package.json file
+	// Now provide the implementation of the command with registerCommand
+	// The commandId parameter must match the command field in package.json
+	const disposable = vscode.commands.registerCommand('ext-copyright.helloWorld', () => {
+		// The code you place here will be executed every time your command is executed
+		// Display a message box to the user
+		vscode.window.showInformationMessage('Hello World from ext-copyright!');
+	});
+
+	const changeDecorationType = vscode.window.createTextEditorDecorationType({
+		textDecoration: 'line-through',
+		backgroundColor: new vscode.ThemeColor('diffEditor.removedTextBackground'),
+		isWholeLine: false,
+	});
+	context.subscriptions.push(changeDecorationType);
+
+	context.subscriptions.push(disposable);
+
+	const manualDisposable = vscode.commands.registerCommand('ext-copyright.addCopyright', () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			return;
+		}
+		const config = vscode.workspace.getConfiguration('ext-copyright');
+		const defaultHeaderText = config.get<string>('headerText');
+		const extensionHeaders = config.get<Record<string, string>>('extensionHeaders', {});
+
+		const fileName = editor.document.fileName;
+		const extIndex = fileName.lastIndexOf('.');
+		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
+
+		let headerText = defaultHeaderText;
+		if (extensionHeaders) {
+			for (const [key, value] of Object.entries(extensionHeaders)) {
+				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
+					headerText = value;
+					break;
+				}
+			}
+		}
+
+		if (headerText) {
+			const result = getCopyrightEdit(editor.document, headerText);
+			if (result) {
+				editor.edit(editBuilder => {
+					editBuilder.replace(result.edit.range, result.edit.newText);
+				});
+			}
+		}
+	});
+	context.subscriptions.push(manualDisposable);
+
+	const ignoreNextSave = new Set<string>();
+
+	const onSaveDisposable = vscode.workspace.onWillSaveTextDocument(event => {
+		if (ignoreNextSave.has(event.document.uri.toString())) {
+			return;
+		}
+
+		const config = vscode.workspace.getConfiguration('ext-copyright');
+		const enabled = config.get<boolean>('enabled');
+		const defaultHeaderText = config.get<string>('headerText');
+		const confirmOnSave = config.get<boolean>('confirmOnSave', true);
+		const fileExtensions = config.get<string[]>('fileExtensions', []);
+		const extensionHeaders = config.get<Record<string, string>>('extensionHeaders', {});
+
+		const fileName = event.document.fileName;
+		const extIndex = fileName.lastIndexOf('.');
+		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
+
+		let headerText = defaultHeaderText;
+		if (extensionHeaders) {
+			for (const [key, value] of Object.entries(extensionHeaders)) {
+				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
+					headerText = value;
+					break;
+				}
+			}
+		}
+
+		if (enabled && headerText) {
+			if (fileExtensions && fileExtensions.length > 0) {
+
+				if (!fileExtensions.some(ext => ext.toLowerCase() === fileExt)) {
+					return;
+				}
+			}
+
+			const result = getCopyrightEdit(event.document, headerText);
+
+			if (result) {
+				const { edit, message } = result;
+				if (!confirmOnSave) {
+					event.waitUntil(Promise.resolve([edit]));
+				} else if (event.reason === vscode.TextDocumentSaveReason.Manual) {
+					const editors = vscode.window.visibleTextEditors.filter(e => e.document === event.document);
+					const decorationOptions: vscode.DecorationOptions = {
+						range: edit.range,
+						renderOptions: {
+							after: {
+								contentText: edit.newText,
+								backgroundColor: new vscode.ThemeColor('diffEditor.insertedTextBackground'),
+								margin: '0 0 0 20px'
+							}
+						}
+					};
+					editors.forEach(editor => editor.setDecorations(changeDecorationType, [decorationOptions]));
+
+					vscode.window.showInformationMessage(message, { modal: true }, 'Yes', 'No').then(async selection => {
+						editors.forEach(editor => editor.setDecorations(changeDecorationType, []));
+						if (selection === 'Yes') {
+							const freshResult = getCopyrightEdit(event.document, headerText);
+							if (freshResult) {
+								const wsEdit = new vscode.WorkspaceEdit();
+								wsEdit.set(event.document.uri, [freshResult.edit]);
+								await vscode.workspace.applyEdit(wsEdit);
+								ignoreNextSave.add(event.document.uri.toString());
+								await event.document.save();
+								ignoreNextSave.delete(event.document.uri.toString());
+							}
+						}
+
+					});
+
+				}
+			}
+		}
+	});
+	context.subscriptions.push(onSaveDisposable);
+}
+
+// This method is called when your extension is deactivated
+export function deactivate() {}
+
+function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { edit: vscode.TextEdit, message: string } | undefined {
+	const text = document.getText();
+	const currentYear = new Date().getFullYear().toString();
+	let match = null;
+	let templateYear = null;
+
+	// 查找配置中的任意4位年份，而不仅仅是当前年份
+	const yearMatch = headerText.match(/\b((?:19|20)\d{2})\b/);
+	if (yearMatch) {
+		templateYear = yearMatch[1];
+		const escapedHeaderText = headerText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
+		const headerRegex = new RegExp('^' + escapedHeaderText.replace(templateYear, yearPattern));
+		match = text.match(headerRegex);
+	}
+
+	if (match && !match[0].toLowerCase().includes('copyright')) {
+		match = null;
+	}
+
+	if (match && templateYear) {
+		const existingYearRange = match[1];
+		const cleanYearRange = existingYearRange.replace(/[()]/g, '');
+		const years = cleanYearRange.split('-');
+		const endYear = years[years.length - 1];
+
+		if (endYear !== currentYear) {
+			const startYear = years[0];
+			const newYearRange = `(${startYear}-${currentYear})`;
+			const prefixIndex = headerText.indexOf(templateYear);
+			const prefix = headerText.substring(0, prefixIndex);
+			const startPos = document.positionAt(prefix.length);
+			const endPos = document.positionAt(prefix.length + existingYearRange.length);
+			const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
+			const message = `Update copyright year from "${existingYearRange}" to "${newYearRange}"?`;
+			return { edit, message };
+		}
+	} else {
+		if (!text.startsWith(headerText)) {
+			const edit = vscode.TextEdit.insert(new vscode.Position(0, 0), headerText + '\n');
+			const message = 'Insert missing copyright header?';
+			return { edit, message };
+		}
+	}
+	return undefined;
+}
