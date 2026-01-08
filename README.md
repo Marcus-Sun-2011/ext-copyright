@@ -1,71 +1,52 @@
-# ext-copyright README
+# ext-copyright
 
-This is the README for your extension "ext-copyright". After writing up a brief description, we recommend including the following sections.
+A VS Code extension that automatically manages copyright headers in your source code files.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- **Automatic Insertion**: Automatically inserts a copyright header if one is missing when you save a file.
+- **Year Update**: Detects existing copyright headers and updates the year to a range (e.g., `2020` becomes `(2020-2025)`) if the current year is different.
+- **Confirmation on Save**: Optionally prompts for confirmation before making changes during a file save operation.
+- **Manual Command**: Provides a command "Update Copyright Header" to manually trigger the check.
+- **Customizable**: Configure different header templates for different file extensions (e.g., `//` for TS/JS, `#` for Python).
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
 For example:
+* `ext-copyright.enabled`: Enable or disable the copyright header check.
+* `ext-copyright.headerText`: The default copyright header text to use if no specific extension match is found.
+* `ext-copyright.confirmOnSave`: Enables a confirmation dialog before updating the copyright header on save (default: `true`).
+* `ext-copyright.fileExtensions`: An array of file extensions to check (e.g., `["ts", "js", "py"]`).
+* `ext-copyright.extensionHeaders`: An object mapping file extensions to specific header text. You can use comma-separated keys.
 
-This extension contributes the following settings:
+### Example Configuration
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
+```json
+{
+  "ext-copyright.enabled": true,
+  "ext-copyright.confirmOnSave": true,
+  "ext-copyright.fileExtensions": [
+    "ts",
+    "js",
+    "py",
+    "cpp",
+    "h"
+  ],
+  "ext-copyright.headerText": "// Copyright (c) 2025 My Company",
+  "ext-copyright.extensionHeaders": {
+    "ts,js": "// Copyright (c) 2025 My Company",
+    "py": "# Copyright (c) 2025 My Company",
+    "cpp,h,hpp": "/* Copyright (c) 2025 My Company */"
+  }
+}
+```
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.2
 
-### 1.0.0
+Added support for multi-line copyright headers, manual command execution, and improved file extension configuration.
 
-Initial release of ...
+### 0.0.1
 
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Initial release with basic copyright header insertion and year update logic.

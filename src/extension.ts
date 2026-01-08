@@ -34,18 +34,19 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		const config = vscode.workspace.getConfiguration('ext-copyright');
-		const defaultHeaderText = config.get<string>('headerText');
-		const extensionHeaders = config.get<Record<string, string>>('extensionHeaders', {});
+		const defaultHeaderTextConfig = config.get<string | string[]>('headerText');
+		const defaultHeaderText = Array.isArray(defaultHeaderTextConfig) ? defaultHeaderTextConfig.join('\n') : defaultHeaderTextConfig;
+		const extensionHeaders = config.get<Record<string, string | string[]>>('extensionHeaders', {});
 
 		const fileName = editor.document.fileName;
 		const extIndex = fileName.lastIndexOf('.');
 		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
 
-		let headerText = defaultHeaderText;
+		let headerText = defaultHeaderText || '';
 		if (extensionHeaders) {
 			for (const [key, value] of Object.entries(extensionHeaders)) {
 				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
-					headerText = value;
+					headerText = Array.isArray(value) ? value.join('\n') : value;
 					break;
 				}
 			}
@@ -71,20 +72,21 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const config = vscode.workspace.getConfiguration('ext-copyright');
 		const enabled = config.get<boolean>('enabled');
-		const defaultHeaderText = config.get<string>('headerText');
+		const defaultHeaderTextConfig = config.get<string | string[]>('headerText');
+		const defaultHeaderText = Array.isArray(defaultHeaderTextConfig) ? defaultHeaderTextConfig.join('\n') : defaultHeaderTextConfig;
 		const confirmOnSave = config.get<boolean>('confirmOnSave', true);
 		const fileExtensions = config.get<string[]>('fileExtensions', []);
-		const extensionHeaders = config.get<Record<string, string>>('extensionHeaders', {});
+		const extensionHeaders = config.get<Record<string, string | string[]>>('extensionHeaders', {});
 
 		const fileName = event.document.fileName;
 		const extIndex = fileName.lastIndexOf('.');
 		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
 
-		let headerText = defaultHeaderText;
+		let headerText = defaultHeaderText || '';
 		if (extensionHeaders) {
 			for (const [key, value] of Object.entries(extensionHeaders)) {
 				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
-					headerText = value;
+					headerText = Array.isArray(value) ? value.join('\n') : value;
 					break;
 				}
 			}
@@ -152,13 +154,20 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 
 	// 查找配置中的任意4位年份，而不仅仅是当前年份
 	const yearMatch = headerText.match(/\b((?:19|20)\d{2})\b/);
+
+	// 将 headerText 按行分割并转义，然后用 \r?\n 连接，以支持跨平台换行符匹配
+	const lines = headerText.split(/\r?\n/);
+	const escapedLines = lines.map(line => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+	let escapedHeaderText = escapedLines.join('\\r?\\n');
+
 	if (yearMatch) {
 		templateYear = yearMatch[1];
-		const escapedHeaderText = headerText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
-		const headerRegex = new RegExp('^' + escapedHeaderText.replace(templateYear, yearPattern));
-		match = text.match(headerRegex);
+		escapedHeaderText = escapedHeaderText.replace(templateYear, yearPattern);
 	}
+
+	const headerRegex = new RegExp('^' + escapedHeaderText);
+	match = text.match(headerRegex);
 
 	if (match && !match[0].toLowerCase().includes('copyright')) {
 		match = null;
@@ -172,18 +181,26 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 
 		if (endYear !== currentYear) {
 			const startYear = years[0];
-			const newYearRange = `(${startYear}-${currentYear})`;
-			const prefixIndex = headerText.indexOf(templateYear);
-			const prefix = headerText.substring(0, prefixIndex);
-			const startPos = document.positionAt(prefix.length);
-			const endPos = document.positionAt(prefix.length + existingYearRange.length);
+			const hasParens = existingYearRange.includes('(');
+			const newYearRange = hasParens ? `(${startYear}-${currentYear})` : `${startYear}-${currentYear}`;
+
+			// 使用匹配到的文本来计算位置，确保在多行和不同换行符下位置准确
+			const yearIndexInMatch = match[0].indexOf(existingYearRange);
+			const startPos = document.positionAt(match.index! + yearIndexInMatch);
+			const endPos = document.positionAt(match.index! + yearIndexInMatch + existingYearRange.length);
+
 			const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
 			const message = `Update copyright year from "${existingYearRange}" to "${newYearRange}"?`;
 			return { edit, message };
 		}
 	} else {
-		if (!text.startsWith(headerText)) {
-			const edit = vscode.TextEdit.insert(new vscode.Position(0, 0), headerText + '\n');
+		let textToInsert = headerText;
+		if (templateYear) {
+			textToInsert = headerText.replace(templateYear, currentYear);
+		}
+
+		if (!text.startsWith(textToInsert)) {
+			const edit = vscode.TextEdit.insert(new vscode.Position(0, 0), textToInsert + '\n');
 			const message = 'Insert missing copyright header?';
 			return { edit, message };
 		}

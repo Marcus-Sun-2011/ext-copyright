@@ -2,7 +2,8 @@
   "name": "ext-copyright",
   "displayName": "ext-copyright",
   "description": "description of extension copyright",
-  "version": "0.0.1",
+  "version": "0.0.2",
+  "publisher": "MarcusS",
   "engines": {
     "vscode": "^1.91.0"
   },
@@ -33,9 +34,15 @@
           "description": "Enable or disable the copyright header check on save."
         },
         "ext-copyright.headerText": {
-          "type": "string",
+          "type": [
+            "string",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
           "default": "// Copyright (c) 2025 My Company",
-          "description": "The copyright header text to check for."
+          "description": "The copyright header text. Can be a string (use \\n for newlines) or an array of strings."
         },
         "ext-copyright.confirmOnSave": {
           "type": "boolean",
@@ -60,11 +67,25 @@
         "ext-copyright.extensionHeaders": {
           "type": "object",
           "default": {
-            "hpp,cpp,h": "/* Copyright (c) 2025 My Company */",
+            "hpp,cpp,h": [
+              "/*!",
+              "* Copyright (c) 2025 My Company ",
+              "* more lines",
+              "*/"
+            ],
             "ts,js": "// Copyright (c) 2025 My Company",
             "py": "# Copyright (c) 2025 My Company"
           },
-          "description": "Map specific file extensions to copyright headers. Key can be a single extension (e.g. 'py') or comma-separated extensions (e.g. 'ts,js,tsx'), value is the header text."
+          "additionalProperties": {
+            "type": [
+              "string",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Map specific file extensions to copyright headers. Values can be strings or arrays of strings."
         }
       }
     }
