@@ -2,7 +2,7 @@
   "name": "ext-copyright",
   "displayName": "ext-copyright",
   "description": "description of extension copyright",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "MarcusS",
   "engines": {
     "vscode": "^1.80.0"
@@ -41,8 +41,8 @@
           "items": {
             "type": "string"
           },
-          "default": "// Copyright (c) 2025 My Company",
-          "description": "The copyright header text. Can be a string (use \\n for newlines) or an array of strings."
+          "default": "// Copyright (c) ${year} My Company",
+          "description": "The copyright header text. You can include version info here. Can be a string (use \\n for newlines) or an array of strings."
         },
         "ext-copyright.confirmOnSave": {
           "type": "boolean",
@@ -69,12 +69,12 @@
           "default": {
             "hpp,cpp,h": [
               "/*!",
-              "* Copyright (c) 2025 My Company ",
+              "* Copyright (c) ${year} My Company ",
               "* more lines",
               "*/"
             ],
-            "ts,js": "// Copyright (c) 2025 My Company",
-            "py": "# Copyright (c) 2025 My Company"
+            "ts,js": "// Copyright (c) ${year} My Company",
+            "py": "# Copyright (c) ${year} My Company"
           },
           "additionalProperties": {
             "type": [
@@ -105,7 +105,7 @@
     "@types/node": "^18.19.0",
     "typescript-eslint": "^8.48.1",
     "eslint": "^9.39.1",
-    "typescript": "^5.9.3",
+    "typescript": "^5.3.3",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2"
   }

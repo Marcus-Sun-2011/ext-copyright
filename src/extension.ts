@@ -151,18 +151,22 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 	const currentYear = new Date().getFullYear().toString();
 	let match = null;
 	let templateYear = null;
+	const hasYearPlaceholder = headerText.includes('${year}');
 
 	// 查找配置中的任意4位年份，而不仅仅是当前年份
-	const yearMatch = headerText.match(/\b((?:19|20)\d{2})\b/);
+	const yearMatch = !hasYearPlaceholder ? headerText.match(/\b((?:19|20)\d{2})\b/) : null;
 
 	// 将 headerText 按行分割并转义，然后用 \r?\n 连接，以支持跨平台换行符匹配
 	const lines = headerText.split(/\r?\n/);
 	const escapedLines = lines.map(line => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 	let escapedHeaderText = escapedLines.join('\\r?\\n');
 
-	if (yearMatch) {
+	const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
+	if (hasYearPlaceholder) {
+		// 在转义后的文本中，${year} 变成了 \$\{year\}，我们需要将其替换为正则捕获组
+		escapedHeaderText = escapedHeaderText.replace(/\\\$\\\{year\\\}/g, yearPattern);
+	} else if (yearMatch) {
 		templateYear = yearMatch[1];
-		const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
 		escapedHeaderText = escapedHeaderText.replace(templateYear, yearPattern);
 	}
 
@@ -173,7 +177,7 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 		match = null;
 	}
 
-	if (match && templateYear) {
+	if (match && (hasYearPlaceholder || templateYear)) {
 		const existingYearRange = match[1];
 		const cleanYearRange = existingYearRange.replace(/[()]/g, '');
 		const years = cleanYearRange.split('-');
@@ -195,7 +199,9 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 		}
 	} else {
 		let textToInsert = headerText;
-		if (templateYear) {
+		if (hasYearPlaceholder) {
+			textToInsert = textToInsert.replace(/\$\{year\}/g, currentYear);
+		} else if (templateYear) {
 			textToInsert = headerText.replace(templateYear, currentYear);
 		}
 
