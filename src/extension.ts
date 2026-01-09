@@ -10,6 +10,51 @@ export function activate(context: vscode.ExtensionContext) {
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "ext-copyright" is now active!');
 
+	const resolveCopyrightHeader = (config: vscode.WorkspaceConfiguration, fileExt: string): string | string[] | undefined => {
+		const extensionHeadersInspect = config.inspect<Record<string, string | string[]>>('extensionHeaders');
+		const headerTextInspect = config.inspect<string | string[]>('headerText');
+
+		// 1. 优先检查用户自定义的特定文件后缀配置 (WorkspaceFolder -> Workspace -> Global)
+		const userExtensionHeaderSources = [
+			extensionHeadersInspect?.workspaceFolderValue,
+			extensionHeadersInspect?.workspaceValue,
+			extensionHeadersInspect?.globalValue
+		];
+
+		for (const source of userExtensionHeaderSources) {
+			if (source) {
+				for (const [key, value] of Object.entries(source)) {
+					if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
+						return value;
+					}
+				}
+			}
+		}
+
+		// 2. 检查用户自定义的全局配置 (headerText)
+		// 如果用户显式设置了 headerText 且不为空，则使用它
+		const userHeaderText = headerTextInspect?.workspaceFolderValue ?? headerTextInspect?.workspaceValue ?? headerTextInspect?.globalValue;
+		if (userHeaderText !== undefined) {
+			const isEmpty = userHeaderText === '' || (Array.isArray(userHeaderText) && userHeaderText.length === 0);
+			if (!isEmpty) {
+				return userHeaderText;
+			}
+		}
+
+		// 3. 检查默认的特定文件后缀配置 (package.json default)
+		const defaultExtensionHeaders = extensionHeadersInspect?.defaultValue;
+		if (defaultExtensionHeaders) {
+			for (const [key, value] of Object.entries(defaultExtensionHeaders)) {
+				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
+					return value;
+				}
+			}
+		}
+
+		// 4. 最后使用默认的全局配置
+		return headerTextInspect?.defaultValue;
+	};
+
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
@@ -34,23 +79,13 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		const config = vscode.workspace.getConfiguration('ext-copyright');
-		const defaultHeaderTextConfig = config.get<string | string[]>('headerText');
-		const defaultHeaderText = Array.isArray(defaultHeaderTextConfig) ? defaultHeaderTextConfig.join('\n') : defaultHeaderTextConfig;
-		const extensionHeaders = config.get<Record<string, string | string[]>>('extensionHeaders', {});
 
 		const fileName = editor.document.fileName;
 		const extIndex = fileName.lastIndexOf('.');
 		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
 
-		let headerText = defaultHeaderText || '';
-		if (extensionHeaders) {
-			for (const [key, value] of Object.entries(extensionHeaders)) {
-				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
-					headerText = Array.isArray(value) ? value.join('\n') : value;
-					break;
-				}
-			}
-		}
+		const headerTextConfig = resolveCopyrightHeader(config, fileExt);
+		const headerText = Array.isArray(headerTextConfig) ? headerTextConfig.join('\n') : (headerTextConfig || '');
 
 		if (headerText) {
 			const result = getCopyrightEdit(editor.document, headerText);
@@ -72,25 +107,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const config = vscode.workspace.getConfiguration('ext-copyright');
 		const enabled = config.get<boolean>('enabled');
-		const defaultHeaderTextConfig = config.get<string | string[]>('headerText');
-		const defaultHeaderText = Array.isArray(defaultHeaderTextConfig) ? defaultHeaderTextConfig.join('\n') : defaultHeaderTextConfig;
 		const confirmOnSave = config.get<boolean>('confirmOnSave', true);
 		const fileExtensions = config.get<string[]>('fileExtensions', []);
-		const extensionHeaders = config.get<Record<string, string | string[]>>('extensionHeaders', {});
 
 		const fileName = event.document.fileName;
 		const extIndex = fileName.lastIndexOf('.');
 		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
 
-		let headerText = defaultHeaderText || '';
-		if (extensionHeaders) {
-			for (const [key, value] of Object.entries(extensionHeaders)) {
-				if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
-					headerText = Array.isArray(value) ? value.join('\n') : value;
-					break;
-				}
-			}
-		}
+		const headerTextConfig = resolveCopyrightHeader(config, fileExt);
+		const headerText = Array.isArray(headerTextConfig) ? headerTextConfig.join('\n') : (headerTextConfig || '');
 
 		if (enabled && headerText) {
 			if (fileExtensions && fileExtensions.length > 0) {
@@ -161,7 +186,7 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 	const escapedLines = lines.map(line => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 	let escapedHeaderText = escapedLines.join('\\r?\\n');
 
-	const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
+	const yearPattern = '(\\d{4}(?:-\\d{4})?)';
 	if (hasYearPlaceholder) {
 		// 在转义后的文本中，${year} 变成了 \$\{year\}，我们需要将其替换为正则捕获组
 		escapedHeaderText = escapedHeaderText.replace(/\\\$\\\{year\\\}/g, yearPattern);
@@ -172,10 +197,6 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 
 	const headerRegex = new RegExp('^' + escapedHeaderText);
 	match = text.match(headerRegex);
-
-	if (match && !match[0].toLowerCase().includes('copyright')) {
-		match = null;
-	}
 
 	if (match && (hasYearPlaceholder || templateYear)) {
 		const existingYearRange = match[1];
