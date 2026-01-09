@@ -2,7 +2,7 @@
   "name": "ext-copyright",
   "displayName": "ext-copyright",
   "description": "description of extension copyright",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "MarcusS",
   "engines": {
     "vscode": "^1.80.0"
