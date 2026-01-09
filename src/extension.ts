@@ -186,7 +186,7 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 	const escapedLines = lines.map(line => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 	let escapedHeaderText = escapedLines.join('\\r?\\n');
 
-	const yearPattern = '(\\d{4}(?:-\\d{4})?)';
+	const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
 	if (hasYearPlaceholder) {
 		// 在转义后的文本中，${year} 变成了 \$\{year\}，我们需要将其替换为正则捕获组
 		escapedHeaderText = escapedHeaderText.replace(/\\\$\\\{year\\\}/g, yearPattern);
@@ -207,7 +207,7 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { 
 		if (endYear !== currentYear) {
 			const startYear = years[0];
 			const hasParens = existingYearRange.includes('(');
-			const newYearRange = hasParens ? `(${startYear}-${currentYear})` : `${startYear}-${currentYear}`;
+			const newYearRange = (hasParens || years.length === 1) ? `(${startYear}-${currentYear})` : `${startYear}-${currentYear}`;
 
 			// 使用匹配到的文本来计算位置，确保在多行和不同换行符下位置准确
 			const yearIndexInMatch = match[0].indexOf(existingYearRange);
