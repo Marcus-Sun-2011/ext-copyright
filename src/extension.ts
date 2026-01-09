@@ -55,6 +55,28 @@ export function activate(context: vscode.ExtensionContext) {
 		return headerTextInspect?.defaultValue;
 	};
 
+	const resolveYearMatchPatterns = (config: vscode.WorkspaceConfiguration, fileExt: string): string[] => {
+		const patternsInspect = config.inspect<Record<string, string[]>>('yearMatchPatterns');
+
+		const sources = [
+			patternsInspect?.workspaceFolderValue,
+			patternsInspect?.workspaceValue,
+			patternsInspect?.globalValue,
+			patternsInspect?.defaultValue
+		];
+
+		for (const source of sources) {
+			if (source) {
+				for (const [key, value] of Object.entries(source)) {
+					if (key.split(',').map(k => k.trim().toLowerCase()).includes(fileExt)) {
+						return value;
+					}
+				}
+			}
+		}
+		return [];
+	};
+
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
@@ -84,11 +106,13 @@ export function activate(context: vscode.ExtensionContext) {
 		const extIndex = fileName.lastIndexOf('.');
 		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
 
+		const maxHeaderSearchLines = config.get<number>('maxHeaderSearchLines', 10);
+		const yearMatchPatterns = resolveYearMatchPatterns(config, fileExt);
 		const headerTextConfig = resolveCopyrightHeader(config, fileExt);
 		const headerText = Array.isArray(headerTextConfig) ? headerTextConfig.join('\n') : (headerTextConfig || '');
 
 		if (headerText) {
-			const result = getCopyrightEdit(editor.document, headerText);
+			const result = getCopyrightEdit(editor.document, headerText, maxHeaderSearchLines, yearMatchPatterns);
 			if (result) {
 				editor.edit(editBuilder => {
 					editBuilder.replace(result.edit.range, result.edit.newText);
@@ -114,6 +138,8 @@ export function activate(context: vscode.ExtensionContext) {
 		const extIndex = fileName.lastIndexOf('.');
 		const fileExt = extIndex >= 0 ? fileName.substring(extIndex + 1).toLowerCase() : '';
 
+		const maxHeaderSearchLines = config.get<number>('maxHeaderSearchLines', 10);
+		const yearMatchPatterns = resolveYearMatchPatterns(config, fileExt);
 		const headerTextConfig = resolveCopyrightHeader(config, fileExt);
 		const headerText = Array.isArray(headerTextConfig) ? headerTextConfig.join('\n') : (headerTextConfig || '');
 
@@ -125,7 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			const result = getCopyrightEdit(event.document, headerText);
+			const result = getCopyrightEdit(event.document, headerText, maxHeaderSearchLines, yearMatchPatterns);
 
 			if (result) {
 				const { edit, message } = result;
@@ -148,7 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
 					vscode.window.showInformationMessage(message, { modal: true }, 'Yes', 'No').then(async selection => {
 						editors.forEach(editor => editor.setDecorations(changeDecorationType, []));
 						if (selection === 'Yes') {
-							const freshResult = getCopyrightEdit(event.document, headerText);
+							const freshResult = getCopyrightEdit(event.document, headerText, maxHeaderSearchLines, yearMatchPatterns);
 							if (freshResult) {
 								const wsEdit = new vscode.WorkspaceEdit();
 								wsEdit.set(event.document.uri, [freshResult.edit]);
@@ -171,66 +197,80 @@ export function activate(context: vscode.ExtensionContext) {
 // This method is called when your extension is deactivated
 export function deactivate() {}
 
-function getCopyrightEdit(document: vscode.TextDocument, headerText: string): { edit: vscode.TextEdit, message: string } | undefined {
-	const text = document.getText();
+function getCopyrightEdit(document: vscode.TextDocument, headerText: string, maxLines: number, matchPatterns: string[]): { edit: vscode.TextEdit, message: string } | undefined {
 	const currentYear = new Date().getFullYear().toString();
-	let match = null;
-	let templateYear = null;
-	const hasYearPlaceholder = headerText.includes('${year}');
 
-	// 查找配置中的任意4位年份，而不仅仅是当前年份
-	const yearMatch = !hasYearPlaceholder ? headerText.match(/\b((?:19|20)\d{2})\b/) : null;
-
-	// 将 headerText 按行分割并转义，然后用 \r?\n 连接，以支持跨平台换行符匹配
-	const lines = headerText.split(/\r?\n/);
-	const escapedLines = lines.map(line => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-	let escapedHeaderText = escapedLines.join('\\r?\\n');
-
-	const yearPattern = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
-	if (hasYearPlaceholder) {
-		// 在转义后的文本中，${year} 变成了 \$\{year\}，我们需要将其替换为正则捕获组
-		escapedHeaderText = escapedHeaderText.replace(/\\\$\\\{year\\\}/g, yearPattern);
-	} else if (yearMatch) {
-		templateYear = yearMatch[1];
-		escapedHeaderText = escapedHeaderText.replace(templateYear, yearPattern);
-	}
-
-	const headerRegex = new RegExp('^' + escapedHeaderText);
-	match = text.match(headerRegex);
-
-	if (match && (hasYearPlaceholder || templateYear)) {
-		const existingYearRange = match[1];
-		const cleanYearRange = existingYearRange.replace(/[()]/g, '');
-		const years = cleanYearRange.split('-');
-		const endYear = years[years.length - 1];
-
-		if (endYear !== currentYear) {
-			const startYear = years[0];
-			const hasParens = existingYearRange.includes('(');
-			const newYearRange = (hasParens || years.length === 1) ? `(${startYear}-${currentYear})` : `${startYear}-${currentYear}`;
-
-			// 使用匹配到的文本来计算位置，确保在多行和不同换行符下位置准确
-			const yearIndexInMatch = match[0].indexOf(existingYearRange);
-			const startPos = document.positionAt(match.index! + yearIndexInMatch);
-			const endPos = document.positionAt(match.index! + yearIndexInMatch + existingYearRange.length);
-
-			const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
-			const message = `Update copyright year from "${existingYearRange}" to "${newYearRange}"?`;
-			return { edit, message };
-		}
+	// 1. 确定用于匹配的模式列表
+	let patterns: string[] = [];
+	if (matchPatterns && matchPatterns.length > 0) {
+		patterns = matchPatterns;
 	} else {
-		let textToInsert = headerText;
-		if (hasYearPlaceholder) {
-			textToInsert = textToInsert.replace(/\$\{year\}/g, currentYear);
-		} else if (templateYear) {
-			textToInsert = headerText.replace(templateYear, currentYear);
-		}
-
-		if (!text.startsWith(textToInsert)) {
-			const edit = vscode.TextEdit.insert(new vscode.Position(0, 0), textToInsert + '\n');
-			const message = 'Insert missing copyright header?';
-			return { edit, message };
+		// 如果没有配置匹配模式，尝试从 headerText 中提取包含 ${year} 的行作为模式
+		const lines = headerText.split(/\r?\n/);
+		const yearLine = lines.find(line => line.includes('${year}'));
+		if (yearLine) {
+			patterns.push(yearLine);
 		}
 	}
-	return undefined;
+
+	// 2. 在文件头部有限的行数内搜索匹配项
+	const lineCount = Math.min(document.lineCount, maxLines);
+	const yearRegexStr = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
+
+	for (let i = 0; i < lineCount; i++) {
+		const line = document.lineAt(i);
+		const lineText = line.text;
+
+		for (const pattern of patterns) {
+			// 转义模式字符串，但保留 ${year} 用于替换
+			const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			// 将 ${year} 替换为年份捕获组
+			const regexStr = escapedPattern.replace(/\\\$\\\{year\\\}/g, yearRegexStr);
+			const regex = new RegExp(regexStr);
+			const match = lineText.match(regex);
+
+			if (match) {
+				// 发现匹配的头部行
+				const existingYearRange = match[1];
+				const cleanYearRange = existingYearRange.replace(/[()]/g, '');
+				const years = cleanYearRange.split('-');
+				const endYear = years[years.length - 1];
+
+				if (endYear !== currentYear) {
+					const startYear = years[0];
+					const hasParens = existingYearRange.includes('(');
+					const newYearRange = (hasParens || years.length === 1) ? `(${startYear}-${currentYear})` : `${startYear}-${currentYear}`;
+
+					// 计算替换范围
+					const matchIndex = match.index || 0;
+					const yearIndexInMatch = match[0].indexOf(existingYearRange);
+					const startPos = line.range.start.translate(0, matchIndex + yearIndexInMatch);
+					const endPos = line.range.start.translate(0, matchIndex + yearIndexInMatch + existingYearRange.length);
+
+					const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
+					const message = `Update copyright year from "${existingYearRange}" to "${newYearRange}"?`;
+					return { edit, message };
+				}
+
+				// 头部存在且年份已是最新，无需操作
+				return undefined;
+			}
+		}
+	}
+
+	// 3. 未检测到头部，准备插入默认头部
+	let textToInsert = headerText;
+	if (textToInsert.includes('${year}')) {
+		textToInsert = textToInsert.replace(/\$\{year\}/g, currentYear);
+	}
+
+	// 简单检查文件开头是否已经完全包含要插入的文本（避免因模式匹配失败导致的重复插入）
+	const docStart = document.getText(new vscode.Range(0, 0, lineCount + 5, 0));
+	if (docStart.replace(/\r\n/g, '\n').startsWith(textToInsert.replace(/\r\n/g, '\n'))) {
+		return undefined;
+	}
+
+	const edit = vscode.TextEdit.insert(new vscode.Position(0, 0), textToInsert + '\n');
+	const message = 'Insert missing copyright header?';
+	return { edit, message };
 }

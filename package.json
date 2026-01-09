@@ -2,7 +2,7 @@
   "name": "ext-copyright",
   "displayName": "ext-copyright",
   "description": "description of extension copyright",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "MarcusS",
   "engines": {
     "vscode": "^1.80.0"
@@ -86,6 +86,36 @@
             }
           },
           "description": "Map specific file extensions to copyright headers. Values can be strings or arrays of strings."
+        },
+        "ext-copyright.maxHeaderSearchLines": {
+          "type": "integer",
+          "default": 10,
+          "description": "Maximum number of lines to search for the copyright header at the beginning of the file."
+        },
+        "ext-copyright.yearMatchPatterns": {
+          "type": "object",
+          "default": {
+            "hpp,cpp,h,c": [
+              "* Copyright (c) ${year} My Company",
+              "// Copyright (c) ${year} My Company",
+              "Copyright (c) ${year} My Company"
+            ],
+            "ts,js": [
+              "// Copyright (c) ${year} My Company",
+              "* Copyright (c) ${year} My Company"
+            ],
+            "py": [
+              "# Copyright (c) ${year} My Company",
+              "# (c) ${year} My Company"
+            ]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Map specific file extensions to copyright year match patterns. Use ${year} as a placeholder."
         }
       }
     }
