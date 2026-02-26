@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { findYearMatch, calculateNewYearRange } from './copyrightUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -215,46 +216,26 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string, max
 
 	// 2. 在文件头部有限的行数内搜索匹配项
 	const lineCount = Math.min(document.lineCount, maxLines);
-	const yearRegexStr = '(\\(?\\d{4}(?:-\\d{4})?\\)?)';
 
 	for (let i = 0; i < lineCount; i++) {
 		const line = document.lineAt(i);
 		const lineText = line.text;
 
-		for (const pattern of patterns) {
-			// 转义模式字符串，但保留 ${year} 用于替换
-			const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-			// 将 ${year} 替换为年份捕获组
-			const regexStr = escapedPattern.replace(/\\\$\\\{year\\\}/g, yearRegexStr);
-			const regex = new RegExp(regexStr);
-			const match = lineText.match(regex);
+		const match = findYearMatch(lineText, patterns);
+		if (match) {
+			const newYearRange = calculateNewYearRange(match.existingYearRange, currentYear);
 
-			if (match) {
-				// 发现匹配的头部行
-				const existingYearRange = match[1];
-				const cleanYearRange = existingYearRange.replace(/[()]/g, '');
-				const years = cleanYearRange.split('-');
-				const endYear = years[years.length - 1];
+			if (newYearRange) {
+				const startPos = line.range.start.translate(0, match.startIndex);
+				const endPos = line.range.start.translate(0, match.endIndex);
 
-				if (endYear !== currentYear) {
-					const startYear = years[0];
-					const hasParens = existingYearRange.includes('(');
-					const newYearRange = (hasParens || years.length === 1) ? `(${startYear}-${currentYear})` : `${startYear}-${currentYear}`;
-
-					// 计算替换范围
-					const matchIndex = match.index || 0;
-					const yearIndexInMatch = match[0].indexOf(existingYearRange);
-					const startPos = line.range.start.translate(0, matchIndex + yearIndexInMatch);
-					const endPos = line.range.start.translate(0, matchIndex + yearIndexInMatch + existingYearRange.length);
-
-					const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
-					const message = `Update copyright year from "${existingYearRange}" to "${newYearRange}"?`;
-					return { edit, message };
-				}
-
-				// 头部存在且年份已是最新，无需操作
-				return undefined;
+				const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
+				const message = `Update copyright year from "${match.existingYearRange}" to "${newYearRange}"?`;
+				return { edit, message };
 			}
+
+			// 头部存在且年份已是最新，无需操作
+			return undefined;
 		}
 	}
 
