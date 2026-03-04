@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { findYearMatch, calculateNewYearRange } from './copyrightUtils';
+import { CopyrightLogger } from './logger';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -10,6 +11,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "ext-copyright" is now active!');
+
+	const logger = new CopyrightLogger(context);
 
 	const resolveCopyrightHeader = (config: vscode.WorkspaceConfiguration, fileExt: string): string | string[] | undefined => {
 		const extensionHeadersInspect = config.inspect<Record<string, string | string[]>>('extensionHeaders');
@@ -155,7 +158,14 @@ export function activate(context: vscode.ExtensionContext) {
 			const result = getCopyrightEdit(event.document, headerText, maxHeaderSearchLines, yearMatchPatterns);
 
 			if (result) {
-				const { edit, message } = result;
+				const { edit, message, type } = result;
+
+				// Log detection context if no header was found (INSERT case)
+				if (type === 'INSERT') {
+					const contentSnippet = event.document.getText(new vscode.Range(0, 0, Math.min(event.document.lineCount, maxHeaderSearchLines), 0));
+					logger.logDetectionFailure(event.document.fileName, contentSnippet);
+				}
+
 				if (!confirmOnSave) {
 					event.waitUntil(Promise.resolve([edit]));
 				} else if (event.reason === vscode.TextDocumentSaveReason.Manual) {
@@ -185,6 +195,9 @@ export function activate(context: vscode.ExtensionContext) {
 								ignoreNextSave.delete(event.document.uri.toString());
 							}
 						}
+						else {
+							logger.logRejection(event.document.fileName, type, edit.newText);
+						}
 
 					});
 
@@ -198,7 +211,7 @@ export function activate(context: vscode.ExtensionContext) {
 // This method is called when your extension is deactivated
 export function deactivate() {}
 
-function getCopyrightEdit(document: vscode.TextDocument, headerText: string, maxLines: number, matchPatterns: string[]): { edit: vscode.TextEdit, message: string } | undefined {
+function getCopyrightEdit(document: vscode.TextDocument, headerText: string, maxLines: number, matchPatterns: string[]): { edit: vscode.TextEdit, message: string, type: 'INSERT' | 'UPDATE' } | undefined {
 	const currentYear = new Date().getFullYear().toString();
 
 	// 1. 确定用于匹配的模式列表
@@ -231,7 +244,7 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string, max
 
 				const edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), newYearRange);
 				const message = `Update copyright year from "${match.existingYearRange}" to "${newYearRange}"?`;
-				return { edit, message };
+				return { edit, message, type: 'UPDATE' };
 			}
 
 			// 头部存在且年份已是最新，无需操作
@@ -253,5 +266,5 @@ function getCopyrightEdit(document: vscode.TextDocument, headerText: string, max
 
 	const edit = vscode.TextEdit.insert(new vscode.Position(0, 0), textToInsert + '\n');
 	const message = 'Insert missing copyright header?';
-	return { edit, message };
+	return { edit, message, type: 'INSERT' };
 }

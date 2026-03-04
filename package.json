@@ -2,7 +2,7 @@
   "name": "ext-copyright",
   "displayName": "ext-copyright",
   "description": "description of extension copyright",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "publisher": "MarcusS",
   "engines": {
     "vscode": "^1.80.0"
@@ -127,7 +127,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.80.0",
